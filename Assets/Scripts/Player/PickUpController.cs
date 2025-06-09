@@ -9,49 +9,41 @@ public class PickUpController : MonoBehaviour
     public GameObject player;
     public Transform holdPos;
     public Transform gunHoldPos;
-    //if you copy from below this point, you are legally required to like the video
-    public float throwForce = 500f; //force at which the object is thrown at
-    public float pickUpRange = 5f; //how far the player can pickup the object from
-    private float rotationSensitivity = 1f; //how fast/slow the object is rotated in relation to mouse movement
-    private GameObject heldObj; //object which we pick up
-    private Rigidbody heldObjRb; //rigidbody of object we pick up
-    private bool canDrop = true; //this is needed so we don't throw/drop object when rotating the object
-    private int LayerNumber; //layer index
+   
+    public float throwForce = 500f; 
+    public float pickUpRange = 5f; 
+    private float rotationSensitivity = 1f; //rotate sen object held
+    private GameObject heldObj; 
+    private Rigidbody heldObjRb; 
+    private bool canDrop = true;
+    private bool isHoldingGun = false;
+    private int LayerNumber; 
 
-    //Reference to script which includes mouse movement of player (looking around)
-    //we want to disable the player looking around when rotating the object
-    //example below 
-    //public SUPERCharacterAIO mouseLookScript;
-    public FirstPersonController mouseLookScript;
+    private FirstPersonController mouseLookScript;
     float originalvalue;
     void Start()
     {
-        LayerNumber = LayerMask.NameToLayer("holdLayer"); //if your holdLayer is named differently make sure to change this ""
-
-        //mouseLookScript = player.GetComponent<SUPERCharacterAIO>(); 
-        //originalvalue = mouseLookScript.Sensitivity;
+        LayerNumber = LayerMask.NameToLayer("holdLayer");
 
         mouseLookScript = player.GetComponent<FirstPersonController>();
         originalvalue = mouseLookScript.sensitivity;
     }
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.E)) //change E to whichever key you want to press to pick up
+        if (Input.GetKeyDown(KeyCode.E)) 
         {
-            if (heldObj == null) //if currently not holding anything
+            if (heldObj == null)
             {
-                //perform raycast to check if player is looking at object within pickuprange
                 Ray ray = Camera.main.ScreenPointToRay(new Vector3(Screen.width / 2, Screen.height / 2));
                 RaycastHit hit;
                 if (Physics.Raycast(ray, out hit, pickUpRange))
                 {
-                 //if (Physics.Raycast(transform.position, transform.TransformDirection(Vector3.forward), out hit, pickUpRange))
-                 //{
-                    //make sure pickup tag is attached
-                    if (hit.transform.gameObject.tag == "canPickUp")
+                    if (hit.transform.gameObject.CompareTag("canPickUp"))
                     {
-                        //pass in object hit into the PickUpObject function
                         PickUpObject(hit.transform.gameObject);
+                    }else if (hit.transform.gameObject.CompareTag("weapon"))
+                    {
+                        PickUpGun(hit.transform.gameObject);
                     }
                 }
             }
@@ -59,16 +51,16 @@ public class PickUpController : MonoBehaviour
             {
                 if(canDrop == true)
                 {
-                    StopClipping(); //prevents object from clipping through walls
+                    StopClipping(); 
                     DropObject();
                 }
             }
         }
-        if (heldObj != null) //if player is holding object
+        if (heldObj != null) 
         {
             MoveObject(); //keep object position at holdPos
-            RotateObject();
-            if (Input.GetKeyDown(KeyCode.Mouse0) && canDrop == true) //Mous0 (leftclick) is used to throw, change this if you want another button to be used)
+            if(!isHoldingGun) RotateObject();
+            if (Input.GetKeyDown(KeyCode.Q) && canDrop == true) 
             {
                 StopClipping();
                 ThrowObject();
@@ -78,13 +70,33 @@ public class PickUpController : MonoBehaviour
     }
     void PickUpObject(GameObject pickUpObj)
     {
-        if (pickUpObj.GetComponent<Rigidbody>()) //make sure the object has a RigidBody
+        if (pickUpObj.GetComponent<Rigidbody>()) 
         {
-            heldObj = pickUpObj; //assign heldObj to the object that was hit by the raycast (no longer == null)
-            heldObjRb = pickUpObj.GetComponent<Rigidbody>(); //assign Rigidbody
+            heldObj = pickUpObj; 
+            heldObjRb = pickUpObj.GetComponent<Rigidbody>(); 
             heldObjRb.isKinematic = true;
-            heldObjRb.transform.parent = holdPos.transform; //parent object to holdposition
-            heldObj.layer = LayerNumber; //change the object layer to the holdLayer
+            heldObj.transform.SetParent(holdPos);
+            heldObj.layer = LayerNumber;
+            isHoldingGun = false;
+            //make sure object doesnt collide with player, it can cause weird bugs
+            Physics.IgnoreCollision(heldObj.GetComponent<Collider>(), player.GetComponent<Collider>(), true);
+        }
+    }
+    void PickUpGun(GameObject pickUpGun)
+    {
+        if (pickUpGun.GetComponent<Rigidbody>())
+        {
+            heldObj = pickUpGun;
+            heldObjRb = pickUpGun.GetComponent<Rigidbody>();
+
+            heldObjRb.isKinematic = true;
+            heldObj.transform.SetParent(gunHoldPos);
+            heldObj.transform.localPosition = Vector3.zero;
+            heldObj.transform.localRotation = Quaternion.Euler(new Vector3(0, 180, 0));
+            heldObj.transform.localScale = Vector3.one;
+
+            heldObj.layer = LayerNumber;
+            isHoldingGun = true;
             //make sure object doesnt collide with player, it can cause weird bugs
             Physics.IgnoreCollision(heldObj.GetComponent<Collider>(), player.GetComponent<Collider>(), true);
         }
@@ -93,38 +105,49 @@ public class PickUpController : MonoBehaviour
     {
         //re-enable collision with player
         Physics.IgnoreCollision(heldObj.GetComponent<Collider>(), player.GetComponent<Collider>(), false);
-        heldObj.layer = 0; //object assigned back to default layer
+        heldObj.layer = 0; 
         heldObjRb.isKinematic = false;
-        heldObj.transform.parent = null; //unparent object
-        heldObj = null; //undefine game object
+        heldObj.transform.parent = null;
+        if (isHoldingGun)
+        {
+            Gun gunScript = heldObj.GetComponent<Gun>();
+            if (gunScript != null)
+            {
+                gunScript.enabled = false;
+            }
+        }
+        heldObj = null;
+        isHoldingGun = false;
     }
     void MoveObject()
-    {
-        //keep object position the same as the holdPosition position
-        heldObj.transform.position = holdPos.transform.position;
+    {       
+        heldObj.transform.position = isHoldingGun ? gunHoldPos.transform.position:holdPos.transform.position;
     }
     void RotateObject()
     {
-        if (Input.GetKey(KeyCode.R))//hold R key to rotate, change this to whatever key you want
+        if (!isHoldingGun)
         {
-            canDrop = false; //make sure throwing can't occur during rotating
+            if (Input.GetKey(KeyCode.R))
+            {
+                canDrop = false; //make sure throwing can't occur during rotating
 
-            //disable player being able to look around
+                //disable player being able to look around
 
-            mouseLookScript.sensitivity = 0 ;
+                mouseLookScript.sensitivity = 0;
 
-            float XaxisRotation = Input.GetAxis("Mouse X") * rotationSensitivity;
-            float YaxisRotation = Input.GetAxis("Mouse Y") * rotationSensitivity;
-            //rotate the object depending on mouse X-Y Axis
-            heldObj.transform.Rotate(Vector3.down, XaxisRotation);
-            heldObj.transform.Rotate(Vector3.right, YaxisRotation);
-        }
-        else
-        {
-            //re-enable player being able to look around
-            mouseLookScript.sensitivity = originalvalue;
+                float XaxisRotation = Input.GetAxis("Mouse X") * rotationSensitivity;
+                float YaxisRotation = Input.GetAxis("Mouse Y") * rotationSensitivity;
+                //rotate the object depending on mouse X-Y Axis
+                heldObj.transform.Rotate(Vector3.down, XaxisRotation);
+                heldObj.transform.Rotate(Vector3.right, YaxisRotation);
+            }
+            else
+            {
+                //re-enable player being able to look around
+                mouseLookScript.sensitivity = originalvalue;
 
-            canDrop = true;
+                canDrop = true;
+            }
         }
     }
     void ThrowObject()
@@ -138,7 +161,16 @@ public class PickUpController : MonoBehaviour
         Vector3 throwDirection = Camera.main.transform.forward;
         heldObjRb.AddForce(throwDirection * throwForce);
 
+        if (isHoldingGun)
+        {
+            Gun gunScript = heldObj.GetComponent<Gun>();
+            if (gunScript != null)
+            {
+                gunScript.enabled = false;
+            }
+        }
         heldObj = null;
+        isHoldingGun = false;
     }
     void StopClipping() //function only called when dropping/throwing
     {
